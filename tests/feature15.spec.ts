@@ -53,11 +53,8 @@ test.describe("Feature 1.5 — Kid-friendly UX", () => {
   test("returning users resume saved work from welcome", async ({ page }) => {
     await waitForCanvas(page);
     await drawStroke(page);
-    await expect
-      .poll(async () => page.getByTestId("save-status").textContent(), {
-        timeout: 10_000,
-      })
-      .toMatch(/All saved|Saved/i);
+    // Debounced IndexedDB persist (~450ms); no save badge in the top bar.
+    await page.waitForTimeout(900);
 
     await page.goto("/");
     await expect(page.getByTestId("welcome-screen")).toBeVisible();
@@ -93,16 +90,6 @@ test.describe("Feature 1.5 — Kid-friendly UX", () => {
       "aria-pressed",
       "true"
     );
-  });
-
-  test("friendly save status copy", async ({ page }) => {
-    await waitForCanvas(page);
-    await drawStroke(page);
-    await expect
-      .poll(async () => page.getByTestId("save-status").textContent(), {
-        timeout: 10_000,
-      })
-      .toMatch(/All saved!/);
   });
 
   test("mascot can be hidden and shown", async ({ page }) => {
@@ -157,7 +144,6 @@ test.describe("Feature 1.5 — Kid-friendly UX", () => {
       await expect(page.getByTestId("canvas-toolbar")).toBeVisible();
       await expect(page.getByTestId("tool-undo")).toBeVisible();
       await expect(page.getByTestId("export-button")).toBeVisible();
-      await expect(page.getByTestId("save-status")).toBeVisible();
     }
   });
 

@@ -71,7 +71,7 @@ export function isTeachBackConceptId(id: string): id is TeachBackConceptId {
 /** First utterance when TeachBack starts a voice session. */
 export function teachBackOpeningInstructions(question: string): string {
   return [
-    "Speak only in English.",
+    "LANGUAGE LOCK: Speak ONLY in clear English. Never use Spanish, French, or any other language.",
     "You are starting TeachBack (Be the Teacher) for unit_fraction_comparison.",
     "Do NOT ask what they are working on today.",
     "Warmly invite them to be the teacher in one short sentence,",

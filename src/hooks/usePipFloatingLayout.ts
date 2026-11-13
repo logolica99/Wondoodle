@@ -7,6 +7,7 @@ export type PipFloatingLayout = {
   mode: "top-right" | "above-zoom" | "bottom-sheet";
   wrapper: CSSProperties;
   panelAbove: boolean;
+  /** Safety ceiling only — card height follows content. */
   panelMaxHeight: number;
   launcherSize: number;
   /** Full-width panel (portrait compact sheet). */

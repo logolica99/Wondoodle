@@ -74,10 +74,8 @@ export function AdventurePanel({
         data-testid="adventure-panel"
         aria-live="polite"
       >
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <p className="font-display text-xl font-semibold text-mc-ink">
-            Current adventure
-          </p>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p className="font-display text-lg font-semibold text-mc-ink">Now</p>
           <PipMascot mood={pipMood} size="sm" />
         </div>
 
@@ -126,11 +124,11 @@ function SelectedDestination({
   const canAct = Boolean(node.href) && !isComingSoon;
 
   return (
-    <div className="space-y-4" data-testid="adventure-selected">
-      <div className="flex items-center gap-3">
+    <div className="space-y-3" data-testid="adventure-selected">
+      <div className="flex items-center gap-2.5">
         <span
           className={cn(
-            "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl shadow-soft",
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-soft",
             isComingSoon && "bg-[#E8F4FF] text-[#3D8FD9]",
             isCompleted && "bg-[#58D9B0] text-mc-ink",
             !isComingSoon &&
@@ -145,21 +143,17 @@ function SelectedDestination({
           aria-hidden
         >
           {isComingSoon ? (
-            <Lock className="h-5 w-5" />
+            <Lock className="h-4 w-4" />
           ) : isCompleted ? (
-            <Check className="h-5 w-5" strokeWidth={3} />
+            <Check className="h-4 w-4" strokeWidth={3} />
           ) : (
-            <Icon className="h-5 w-5" />
+            <Icon className="h-4 w-4" />
           )}
         </span>
-        <p className="font-display text-lg font-semibold leading-tight text-mc-ink">
+        <p className="font-display text-base font-semibold leading-tight text-mc-ink">
           {node.name}
         </p>
       </div>
-
-      <p className="text-base leading-snug text-mc-ink/80">
-        {isComingSoon ? "This stop isn’t open yet." : node.mission}
-      </p>
 
       {canAct && (
         <Button
@@ -168,7 +162,7 @@ function SelectedDestination({
           data-testid={isCompleted ? "journey-revisit" : "journey-go"}
         >
           <Link href={node.href!}>
-            {isCompleted ? "Visit again" : node.actionLabel}
+            {isCompleted ? "Again" : node.actionLabel}
           </Link>
         </Button>
       )}
@@ -178,20 +172,16 @@ function SelectedDestination({
           className="text-sm font-semibold text-[#3D8FD9]"
           data-testid="journey-coming-soon"
         >
-          Coming soon
+          Soon
         </p>
       )}
 
       {isCompleted && (
         <p
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700"
+          className="text-sm font-semibold text-emerald-700"
           data-testid="journey-completed-detail"
         >
-          <Check className="h-4 w-4" strokeWidth={3} aria-hidden />
           Done
-          {node.completedAt
-            ? ` · ${new Date(node.completedAt).toLocaleDateString()}`
-            : ""}
         </p>
       )}
 
@@ -203,18 +193,12 @@ function SelectedDestination({
 function EmptyAdventure() {
   return (
     <div className="space-y-3" data-testid="lesson-summary-empty">
-      <p className="font-display text-lg font-semibold text-mc-ink">
-        Make your first doodle
-      </p>
-      <p className="text-base text-mc-ink/80">
-        Draw something on the canvas to begin.
-      </p>
       <Button
         asChild
         className="w-full rounded-2xl bg-[#7357E8] text-white hover:bg-[#6346d4]"
         data-testid="summary-start-doodle"
       >
-        <Link href="/learn">Start doodling</Link>
+        <Link href="/learn">Canvas</Link>
       </Button>
     </div>
   );
@@ -229,25 +213,17 @@ function Overview({
 }) {
   return (
     <div className="space-y-3" data-testid="lesson-summary-content">
-      {summary.nextActivity ? (
-        <>
-          <p className="font-display text-lg font-semibold text-mc-ink">
+      {summary.nextActivity?.href ? (
+        <Button
+          asChild
+          className="w-full rounded-2xl bg-[#7357E8] text-white hover:bg-[#6346d4]"
+          data-testid="summary-next-activity"
+        >
+          <Link href={summary.nextActivity.href}>
             {summary.nextActivity.name}
-          </p>
-          <p className="text-base text-mc-ink/80">Pick a stop on the map.</p>
-          {summary.nextActivity.href && (
-            <Button
-              asChild
-              className="w-full rounded-2xl bg-[#7357E8] text-white hover:bg-[#6346d4]"
-              data-testid="summary-next-activity"
-            >
-              <Link href={summary.nextActivity.href}>Continue</Link>
-            </Button>
-          )}
-        </>
-      ) : (
-        <p className="text-base text-mc-ink/80">Tap a destination on the map.</p>
-      )}
+          </Link>
+        </Button>
+      ) : null}
       <DiscoveryLog events={events} />
     </div>
   );
@@ -271,7 +247,7 @@ function DiscoveryLog({ events }: { events: LearningEvent[] }) {
         onClick={() => setOpen((v) => !v)}
         data-testid="discovery-log-toggle"
       >
-        Discovery log
+        Log
         <ChevronDown
           className={cn(
             "h-4 w-4 shrink-0 transition-transform",

@@ -148,11 +148,8 @@ test.describe("Smart Canvas", () => {
     await drawStroke(page, { x: 180, y: 180 });
     await expect(page.getByTestId("canvas-empty-state")).toHaveCount(0);
 
-    await expect
-      .poll(async () => page.getByTestId("save-status").textContent(), {
-        timeout: 10_000,
-      })
-      .toMatch(/Saved/);
+    // Debounced IndexedDB persist (~450ms); save badge removed from top bar.
+    await page.waitForTimeout(900);
 
     await waitForCanvas(page, { reload: true });
     await expect(page.getByTestId("canvas-empty-state")).toHaveCount(0);

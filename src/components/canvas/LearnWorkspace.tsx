@@ -15,6 +15,9 @@ import { FractionPlayground } from "@/components/learning/FractionPlayground";
 import { TeachBackPanel } from "@/components/learning/TeachBackPanel";
 import { MasteryChallengePanel } from "@/components/learning/MasteryChallengePanel";
 import { BaselineInvite } from "@/components/learning/BaselineInvite";
+import { AdventureReadyToast } from "@/components/adventure/AdventureReadyToast";
+import { AdventureCanvasChip } from "@/components/adventure/AdventureCanvasChip";
+import { requestAdventureStepVoice } from "@/lib/adventure/requestConversationalCreate";
 import { CelebrationBurst } from "@/components/learning/CelebrationBurst";
 import { AppNav } from "@/components/nav/AppNav";
 import { useUiStore } from "@/store/uiStore";
@@ -23,6 +26,7 @@ import { usePipStore } from "@/store/pipStore";
 import { useActivityStore } from "@/store/activityStore";
 import { useTeachBackStore } from "@/store/teachbackStore";
 import { useMasteryStore } from "@/store/masteryStore";
+import { useAdventureStore } from "@/store/adventureStore";
 import { buildActivityRoute } from "@/lib/learning/misconceptions";
 import { getAllLearningEvents } from "@/lib/learning/events";
 import { baselineQuestionIdsFromEvents } from "@/lib/learning/masteryProof";
@@ -63,6 +67,8 @@ export function LearnWorkspace() {
   const rememberBaselineQuestions = useMasteryStore(
     (s) => s.rememberBaselineQuestions
   );
+  const hydrateAdventure = useAdventureStore((s) => s.hydrate);
+  const documentId = useCanvasStore((s) => s.document.id);
   const markWorkspaceEntered = useUiStore((s) => s.markWorkspaceEntered);
   const celebratedFirstStroke = useUiStore((s) => s.celebratedFirstStroke);
   const markFirstStrokeCelebrated = useUiStore(
@@ -81,6 +87,17 @@ export function LearnWorkspace() {
   useEffect(() => {
     markWorkspaceEntered();
   }, [markWorkspaceEntered]);
+
+  useEffect(() => {
+    void hydrateAdventure(documentId);
+  }, [hydrateAdventure, documentId]);
+
+  // Continue active adventure step from Journey — always with Pip voice.
+  useEffect(() => {
+    if (searchParams.get("adventureStep") === "1") {
+      requestAdventureStepVoice();
+    }
+  }, [searchParams]);
 
   // Welcome naming card → ensure title sticks even if hydrate already ran.
   useEffect(() => {
@@ -219,6 +236,8 @@ export function LearnWorkspace() {
         onSkip={() => setBaselineInviteOpen(false)}
       />
       <MasteryChallengePanel />
+      <AdventureCanvasChip />
+      <AdventureReadyToast />
       <CelebrationBurst />
 
       <div className="pointer-events-none absolute inset-x-0 bottom-[5.75rem] z-30 px-3 sm:bottom-5 sm:left-[5.75rem] sm:right-[12.5rem] sm:px-0">

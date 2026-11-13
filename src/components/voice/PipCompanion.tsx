@@ -27,6 +27,8 @@ import {
 import { hasMeaningfulPipExchange } from "@/lib/learning/meaningfulPipTalk";
 import { buildActivityRoute } from "@/lib/learning/misconceptions";
 import type { DiscoveryCardModel } from "@/lib/learning/observationSchema";
+import { PipAdventureSection } from "@/components/adventure/PipAdventureSection";
+import { useAdventureStore } from "@/store/adventureStore";
 import { cn } from "@/lib/utils";
 
 function statusLabel(
@@ -78,6 +80,9 @@ export function PipCompanion() {
   const uiMood = useUiStore((s) => s.pipMood);
   const getExportableDocument = useCanvasStore((s) => s.getExportableDocument);
   const documentId = useCanvasStore((s) => s.document.id);
+  const adventureActive = useAdventureStore(
+    (s) => s.hydrated && s.adventure?.status === "active"
+  );
   const layout = usePipFloatingLayout(expanded);
 
   const [shareMessage, setShareMessage] = useState<string | null>(null);
@@ -126,11 +131,54 @@ export function PipCompanion() {
     [openFractionPlayground]
   );
 
+  const onCreateAdventure = useCallback(
+    async (args: {
+      goal: string;
+      studentAgreed: boolean;
+      conversationSummary: string | null;
+    }) => {
+      const { useCanvasStore } = await import("@/store/canvasStore");
+      const { useUiStore } = await import("@/store/uiStore");
+      const { useAdventureStore } = await import("@/store/adventureStore");
+      const { getRecentPipConversationContext } = await import(
+        "@/lib/voice/pipCaptions"
+      );
+      const doc = useCanvasStore.getState().getExportableDocument();
+      const paperStyle = useUiStore.getState().paperStyle;
+      const captions = getRecentPipConversationContext();
+      const conversationContext = [
+        args.conversationSummary,
+        captions,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+      const result = await useAdventureStore
+        .getState()
+        .createAdventureFromConversation({
+          doc,
+          paperStyle,
+          goal: args.goal,
+          conversationContext: conversationContext || null,
+          studentAgreed: args.studentAgreed,
+        });
+      if (result.ok) {
+        // Start the adventure on canvas immediately (step panel + Pip voice).
+        const { requestAdventureStepVoice } = await import(
+          "@/lib/adventure/requestConversationalCreate"
+        );
+        requestAdventureStepVoice();
+      }
+      return result;
+    },
+    []
+  );
+
   const pip = useRealtimePip({
     getCanvasSnapshot,
     onShareStatus,
     onDiscoveryObservation,
     onOpenActivity,
+    onCreateAdventure,
     documentId,
   });
 
@@ -145,8 +193,9 @@ export function PipCompanion() {
     for (const event of events) {
       const isTeachback = event.payload?.mode === "teachback";
       const isMastery = event.payload?.mode === "mastery";
+      const isAdventure = event.payload?.mode === "adventure";
       const shouldSpeak = event.payload?.speak === true;
-      if ((isTeachback || isMastery) && shouldSpeak) {
+      if ((isTeachback || isMastery || isAdventure) && shouldSpeak) {
         pip.interrupt();
       }
       notifyActivityEvent(
@@ -156,15 +205,27 @@ export function PipCompanion() {
           ...event.payload,
         },
         {
-          createResponse: isTeachback || isMastery ? shouldSpeak : true,
+          createResponse:
+            isTeachback || isMastery || isAdventure ? shouldSpeak : true,
           instructions:
             isTeachback &&
             shouldSpeak &&
             typeof event.payload?.question === "string"
               ? `Stay in TeachBack. Do NOT ask what they are working on today. Ask this question now and wait: "${event.payload.question}". Then call report_teachback_assessment after they explain.`
               : isMastery && shouldSpeak
-                ? "Mastery challenge update only. Do not give fraction hints. Speak briefly in English using the activity event facts."
-                : undefined,
+                ? "Mastery challenge update only. Do not give fraction hints. Speak briefly using the activity event facts."
+                : isAdventure &&
+                    shouldSpeak &&
+                    event.payload?.phase === "create_invite"
+                  ? "Follow the Adventure invite exactly. After looking at the canvas, say only: “Is this your adventure: ___?” with a short guessed goal. Do not describe the canvas. Do not ask tutoring questions. Wait for yes, then call create_adventure."
+                  : isAdventure &&
+                      shouldSpeak &&
+                      event.payload?.phase === "evaluated" &&
+                      event.payload?.decision === "complete"
+                    ? "The adventure step is complete. Celebrate briefly in English and stop tutoring this problem. Do not ask another question."
+                    : isAdventure && shouldSpeak
+                      ? "Stay in the adventure voice session. Speak briefly in English. If correct: confirm and invite Check — stop. If wrong: name the specific wrong part (which number/step) in one sentence. Do not ask them to type."
+                      : undefined,
         }
       );
     }
@@ -251,9 +312,11 @@ export function PipCompanion() {
     maybeRecordMeaningfulCompletion();
     didStartTalkRef.current = false;
     talkStartedAtRef.current = null;
+    // Stop any queued auto-reconnect (adventure/TeachBack) before disconnecting.
+    usePipStore.getState().clearPendingVoiceStart();
     pip.disconnect();
     setShareMessage(null);
-    setCompanionOpen(false);
+    usePipStore.getState().closeCompanion();
   };
 
   const toggleExpanded = () => {
@@ -278,12 +341,13 @@ export function PipCompanion() {
     <motion.aside
       id="pip-companion-panel"
       className={cn(
-        "pointer-events-auto overflow-hidden rounded-3xl border border-white/90 bg-white/95 shadow-toolbar backdrop-blur-md",
+        "pointer-events-auto flex flex-col overflow-hidden rounded-3xl border border-white/90 bg-white/95 shadow-toolbar backdrop-blur-md",
         layout.fullWidthPanel ? "w-full" : "w-[min(100vw-2rem,20rem)]"
       )}
       style={{ maxHeight: layout.panelMaxHeight }}
       data-testid="pip-companion"
       data-placement={layout.mode}
+      data-adventure={adventureActive ? "true" : "false"}
       initial={
         reduceMotion
           ? false
@@ -297,31 +361,40 @@ export function PipCompanion() {
       }
       transition={{ duration: 0.2 }}
     >
-      <div className="flex items-start justify-between gap-2 border-b border-mc-purple/10 px-4 py-3">
-        <div className="min-w-0">
-          <p className="font-display text-base font-semibold text-mc-ink">
-            Talk to Pip
-          </p>
-          <p
-            className="text-sm text-mc-ink/60"
-            data-testid="pip-connection-status"
+      {/* Fixed header — adventure only adds its own height */}
+      <div className="shrink-0 border-b border-mc-purple/10 px-4 py-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="font-display text-base font-semibold text-mc-ink">
+              Talk to Pip
+            </p>
+            <p
+              className="text-sm text-mc-ink/60"
+              data-testid="pip-connection-status"
+            >
+              {statusLabel(pip.connection, pip.voiceState, pip.muted)}
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0 rounded-full"
+            aria-label="Collapse Pip panel"
+            data-testid="pip-collapse"
+            onClick={() => setCompanionOpen(false)}
           >
-            {statusLabel(pip.connection, pip.voiceState, pip.muted)}
-          </p>
+            <ChevronDown className="h-4 w-4" />
+          </Button>
         </div>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="shrink-0 rounded-full"
-          aria-label="Collapse Pip panel"
-          data-testid="pip-collapse"
-          onClick={() => setCompanionOpen(false)}
-        >
-          <ChevronDown className="h-4 w-4" />
-        </Button>
+        {adventureActive ? (
+          <div className="mt-2.5">
+            <PipAdventureSection />
+          </div>
+        ) : null}
       </div>
 
-      <div className="space-y-3 overflow-y-auto px-4 py-3">
+      {/* Controls stay fixed height */}
+      <div className="shrink-0 space-y-3 px-4 py-3">
         {pip.connection === "idle" && (
           <Button
             size="lg"
@@ -345,7 +418,10 @@ export function PipCompanion() {
               variant="secondary"
               className="rounded-xl"
               data-testid="pip-connect-cancel"
-              onClick={() => pip.disconnect()}
+              onClick={() => {
+                usePipStore.getState().clearPendingVoiceStart();
+                pip.disconnect();
+              }}
             >
               Cancel
             </Button>
@@ -420,35 +496,36 @@ export function PipCompanion() {
             {shareMessage}
           </p>
         )}
-
-        {pip.captions.length > 0 && (
-          <div
-            ref={captionsScrollRef}
-            className="max-h-28 space-y-2 overflow-y-auto rounded-2xl bg-[#FAF9F6] p-3"
-            data-testid="pip-captions"
-            aria-live="polite"
-          >
-            {pip.captions.map((line) => (
-              <p
-                key={line.id}
-                className={cn(
-                  "text-xs leading-snug",
-                  line.role === "assistant"
-                    ? "font-semibold text-mc-purple"
-                    : "text-mc-ink/80"
-                )}
-                data-testid={`pip-caption-${line.role}`}
-              >
-                <span className="mr-1 opacity-60">
-                  {line.role === "assistant" ? "Pip" : "You"}:
-                </span>
-                {line.text}
-                {line.partial ? "…" : ""}
-              </p>
-            ))}
-          </div>
-        )}
       </div>
+
+      {/* Only captions (subtitle transcript) scroll — fixed cap, card grows by content otherwise */}
+      {pip.captions.length > 0 ? (
+        <div
+          ref={captionsScrollRef}
+          className="max-h-28 shrink space-y-2 overflow-y-auto border-t border-mc-purple/10 px-4 py-3"
+          data-testid="pip-captions"
+          aria-live="polite"
+        >
+          {pip.captions.map((line) => (
+            <p
+              key={line.id}
+              className={cn(
+                "text-xs leading-snug",
+                line.role === "assistant"
+                  ? "font-semibold text-mc-purple"
+                  : "text-mc-ink/80"
+              )}
+              data-testid={`pip-caption-${line.role}`}
+            >
+              <span className="mr-1 opacity-60">
+                {line.role === "assistant" ? "Pip" : "You"}:
+              </span>
+              {line.text}
+              {line.partial ? "…" : ""}
+            </p>
+          ))}
+        </div>
+      ) : null}
     </motion.aside>
   ) : null;
 

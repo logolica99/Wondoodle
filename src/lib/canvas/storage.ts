@@ -7,6 +7,13 @@ import {
 import { createEmptyDocument } from "./document";
 import type { VoiceNote } from "@/types/voice";
 import type { LearningEvent } from "@/types/learning";
+import type {
+  AdventureEvidence,
+  AdventureRevision,
+  AdventureStep,
+  CanvasSnapshotRecord,
+  LearningAdventure,
+} from "@/types/adventure";
 
 export type DocumentRecord = {
   id: string;
@@ -19,6 +26,11 @@ export type DocumentRecord = {
 class WondoodleDB extends Dexie {
   documents!: Table<DocumentRecord, string>;
   learningEvents!: Table<LearningEvent, string>;
+  learningAdventures!: Table<LearningAdventure, string>;
+  adventureSteps!: Table<AdventureStep, string>;
+  adventureRevisions!: Table<AdventureRevision, string>;
+  adventureEvidence!: Table<AdventureEvidence, string>;
+  canvasSnapshots!: Table<CanvasSnapshotRecord, string>;
 
   constructor() {
     super("WondoodleDB");
@@ -34,6 +46,17 @@ class WondoodleDB extends Dexie {
       documents: "id, updatedAt, schemaVersion",
       learningEvents:
         "eventId, sessionId, documentId, conceptId, eventType, timestamp",
+    });
+    // v4 — Adaptive Canvas-to-Adventure entities (preserves v3 learningEvents).
+    this.version(4).stores({
+      documents: "id, updatedAt, schemaVersion",
+      learningEvents:
+        "eventId, sessionId, documentId, conceptId, eventType, timestamp",
+      learningAdventures: "id, documentId, sessionId, status, updatedAt",
+      adventureSteps: "id, adventureId, order, status",
+      adventureRevisions: "id, adventureId, createdAt",
+      adventureEvidence: "id, adventureId, stepId, createdAt",
+      canvasSnapshots: "id, documentId, adventureId, createdAt",
     });
   }
 }

@@ -185,19 +185,25 @@ function StrokeRenderer({
       width={Math.max(bounds.width, 8)}
       height={Math.max(bounds.height, 8)}
       draggable={draggable}
+      // Only capture pointers in Move mode so pen/eraser can work on top of strokes.
+      listening={draggable}
       onMouseDown={(e) => {
+        if (!draggable) return;
         e.cancelBubble = true;
         selectObject(object.id);
       }}
       onTouchStart={(e) => {
+        if (!draggable) return;
         e.cancelBubble = true;
         selectObject(object.id);
       }}
       onClick={(e) => {
+        if (!draggable) return;
         e.cancelBubble = true;
         selectObject(object.id);
       }}
       onTap={(e) => {
+        if (!draggable) return;
         e.cancelBubble = true;
         selectObject(object.id);
       }}
@@ -306,15 +312,19 @@ function TextRenderer({
       fontFamily={object.fontFamily}
       fill={object.color}
       draggable={draggable && !transformingRef.current}
+      listening={draggable}
       onMouseDown={(e) => {
+        if (!draggable) return;
         e.cancelBubble = true;
         selectObject(object.id);
       }}
       onTouchStart={(e) => {
+        if (!draggable) return;
         e.cancelBubble = true;
         selectObject(object.id);
       }}
       onClick={(e) => {
+        if (!draggable) return;
         e.cancelBubble = true;
         // Don't enter edit mode when the transformer just handled a resize.
         if (transformingRef.current) return;
@@ -325,6 +335,7 @@ function TextRenderer({
         }
       }}
       onTap={(e) => {
+        if (!draggable) return;
         e.cancelBubble = true;
         if (transformingRef.current) return;
         if (isSelected) {
@@ -334,10 +345,12 @@ function TextRenderer({
         }
       }}
       onDblClick={(e) => {
+        if (!draggable) return;
         e.cancelBubble = true;
         setEditingTextId(object.id);
       }}
       onDblTap={(e) => {
+        if (!draggable) return;
         e.cancelBubble = true;
         setEditingTextId(object.id);
       }}
@@ -425,21 +438,25 @@ function ImageRenderer({
       width={object.width}
       height={object.height}
       opacity={revealOpacity}
-      listening={revealOpacity > 0.9}
+      listening={draggable && revealOpacity > 0.9}
       draggable={draggable}
       onMouseDown={(e) => {
+        if (!draggable) return;
         e.cancelBubble = true;
         selectObject(object.id);
       }}
       onTouchStart={(e) => {
+        if (!draggable) return;
         e.cancelBubble = true;
         selectObject(object.id);
       }}
       onClick={(e) => {
+        if (!draggable) return;
         e.cancelBubble = true;
         selectObject(object.id);
       }}
       onTap={(e) => {
+        if (!draggable) return;
         e.cancelBubble = true;
         selectObject(object.id);
       }}

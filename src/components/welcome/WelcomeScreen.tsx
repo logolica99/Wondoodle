@@ -13,7 +13,6 @@ import {
   setPendingDocumentTitle,
 } from "@/lib/canvas/pendingTitle";
 import { getAllLearningEvents } from "@/lib/learning/events";
-import { hasBaselineAssessment } from "@/lib/learning/masteryProof";
 import { useUiStore } from "@/store/uiStore";
 import { cn } from "@/lib/utils";
 
@@ -37,7 +36,6 @@ export function WelcomeScreen() {
   const markWorkspaceEntered = useUiStore((s) => s.markWorkspaceEntered);
   const [returning, setReturning] = useState(false);
   const [ready, setReady] = useState(false);
-  const [offerBaseline, setOfferBaseline] = useState(false);
   const [pipState, setPipState] = useState<PipAnimState>("idle");
   const [step, setStep] = useState<WelcomeStep>("home");
   const [projectName, setProjectName] = useState("");
@@ -55,12 +53,8 @@ export function WelcomeScreen() {
           (e) => e.eventType !== "journey_opened"
         );
         setReturning(doc.objects.length > 0 || progressEvents.length > 0);
-        setOfferBaseline(!hasBaselineAssessment(events));
       } catch {
-        if (!cancelled) {
-          setReturning(false);
-          setOfferBaseline(true);
-        }
+        if (!cancelled) setReturning(false);
       } finally {
         if (!cancelled) setReady(true);
       }
@@ -172,19 +166,6 @@ export function WelcomeScreen() {
                   >
                     {ready ? copy.primary : "Loading…"}
                   </Button>
-                  {offerBaseline ? (
-                    <Button
-                      asChild
-                      variant="outline"
-                      size="lg"
-                      className="min-h-11 w-full rounded-2xl border-2 border-[#FF91B6]/50 bg-[#FFF0F5] px-8 text-base font-semibold text-[#C45A7A] transition hover:bg-[#ffe8f1] active:scale-[0.98] sm:min-w-[240px] sm:w-auto"
-                      data-testid="welcome-baseline"
-                    >
-                      <Link href="/learn?baseline=1">
-                        Quick check first
-                      </Link>
-                    </Button>
-                  ) : null}
                   <Button
                     asChild
                     variant="outline"

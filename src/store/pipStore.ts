@@ -14,6 +14,11 @@ type PipStore = {
    * Used so TeachBack can replace the generic "what are we working on" greeting.
    */
   openingInstructions: string | null;
+  /**
+   * When true, the next look_at_canvas reply must guess the adventure
+   * (“Is this your adventure: …?”) instead of tutoring.
+   */
+  adventureInvitePending: boolean;
   connection: PipStoreConnection;
   voiceState: PipStoreVoice;
   openCompanion: (options?: { autoStartTalk?: boolean }) => void;
@@ -22,16 +27,21 @@ type PipStore = {
   consumeAutoStartTalk: () => boolean;
   setOpeningInstructions: (instructions: string | null) => void;
   consumeOpeningInstructions: () => string | null;
+  setAdventureInvitePending: (pending: boolean) => void;
+  consumeAdventureInvitePending: () => boolean;
   setRealtimeStatus: (
     connection: PipStoreConnection,
     voiceState?: PipStoreVoice
   ) => void;
+  /** Clear pending auto-start / opening prompts (e.g. after End conversation). */
+  clearPendingVoiceStart: () => void;
 };
 
 export const usePipStore = create<PipStore>((set, get) => ({
   companionOpen: false,
   autoStartTalk: false,
   openingInstructions: null,
+  adventureInvitePending: false,
   connection: "idle",
   voiceState: "idle",
   openCompanion: (options) =>
@@ -44,13 +54,18 @@ export const usePipStore = create<PipStore>((set, get) => ({
       companionOpen: false,
       autoStartTalk: false,
       openingInstructions: null,
+      adventureInvitePending: false,
     }),
   setCompanionOpen: (companionOpen) =>
     set({
       companionOpen,
       ...(companionOpen
         ? {}
-        : { autoStartTalk: false, openingInstructions: null }),
+        : {
+            autoStartTalk: false,
+            openingInstructions: null,
+            adventureInvitePending: false,
+          }),
     }),
   consumeAutoStartTalk: () => {
     const should = get().autoStartTalk;
@@ -63,9 +78,22 @@ export const usePipStore = create<PipStore>((set, get) => ({
     if (value) set({ openingInstructions: null });
     return value;
   },
+  setAdventureInvitePending: (adventureInvitePending) =>
+    set({ adventureInvitePending }),
+  consumeAdventureInvitePending: () => {
+    const pending = get().adventureInvitePending;
+    if (pending) set({ adventureInvitePending: false });
+    return pending;
+  },
   setRealtimeStatus: (connection, voiceState) =>
     set((state) => ({
       connection,
       voiceState: voiceState ?? state.voiceState,
     })),
+  clearPendingVoiceStart: () =>
+    set({
+      autoStartTalk: false,
+      openingInstructions: null,
+      adventureInvitePending: false,
+    }),
 }));

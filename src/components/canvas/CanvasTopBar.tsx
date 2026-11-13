@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Download, Eraser, Redo2, Undo2 } from "lucide-react";
+import { Download, Eraser, Redo2, Sparkles, Undo2 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,17 +21,15 @@ import {
 } from "@/components/ui/dialog";
 import { WondoodleLogo } from "@/components/brand/WondoodleLogo";
 import { AppNav } from "@/components/nav/AppNav";
-import { SaveStatusBadge } from "./SaveStatus";
 import { useCanvasStore } from "@/store/canvasStore";
 import { useUiStore } from "@/store/uiStore";
 import { copy } from "@/lib/design-tokens";
 import { exportDocument } from "@/lib/canvas/export";
+import { requestConversationalAdventureCreate } from "@/lib/adventure/requestConversationalCreate";
 
 export function CanvasTopBar() {
   const title = useCanvasStore((s) => s.document.title);
   const setTitle = useCanvasStore((s) => s.setTitle);
-  const saveStatus = useCanvasStore((s) => s.saveStatus);
-  const saveError = useCanvasStore((s) => s.saveError);
   const clearCanvas = useCanvasStore((s) => s.clearCanvas);
   const undo = useCanvasStore((s) => s.undo);
   const redo = useCanvasStore((s) => s.redo);
@@ -78,7 +76,6 @@ export function CanvasTopBar() {
 
         <div className="flex items-center gap-1.5 sm:gap-2">
           <AppNav className="hidden md:flex" />
-          <SaveStatusBadge status={saveStatus} error={saveError} />
 
           <TooltipProvider delayDuration={180}>
             <div
@@ -119,6 +116,19 @@ export function CanvasTopBar() {
               </Tooltip>
             </div>
           </TooltipProvider>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            className="min-h-10 rounded-xl border border-[#7357E8]/25 bg-[#F6F3FF] text-[#7357E8] hover:bg-[#EFEAFF]"
+            data-testid="make-adventure-button"
+            aria-label="Make an Adventure"
+            disabled={objectCount === 0}
+            onClick={() => requestConversationalAdventureCreate()}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Adventure
+          </Button>
 
           <Button
             variant="secondary"

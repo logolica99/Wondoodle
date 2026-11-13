@@ -6,6 +6,12 @@ import type { CanvasSnapshotResult } from "@/lib/canvas/snapshot";
 import { REPORT_LEARNING_OBSERVATION_NAME } from "@/lib/voice/reportLearningObservation";
 import { OPEN_LEARNING_ACTIVITY_NAME } from "@/lib/voice/openLearningActivity";
 import { REPORT_TEACHBACK_ASSESSMENT_NAME } from "@/lib/voice/reportTeachbackAssessment";
+import {
+  CREATE_ADVENTURE_NAME,
+  CREATE_LEARNING_ADVENTURE_NAME,
+  parseCreateAdventureArgs,
+  type CreateAdventureToolArgs,
+} from "@/lib/voice/createAdventureTool";
 import { parseLearningObservationArgs } from "@/lib/learning/observationSchema";
 import { applyLearningObservation } from "@/lib/learning/observationHandler";
 import { parseTeachBackAssessmentArgs } from "@/lib/learning/teachbackSchema";
@@ -18,6 +24,7 @@ import {
 } from "@/store/activityStore";
 import { usePipStore } from "@/store/pipStore";
 import { isMasteryIndependentActive } from "@/store/masteryStore";
+import { withEnglishLock } from "@/lib/voice/pipInstructions";
 
 export type PipConnectionState =
   | "idle"
@@ -99,6 +106,16 @@ export type UseRealtimePipOptions = {
   onDiscoveryObservation?: (card: DiscoveryCardModel) => void;
   /** Open a validated activity from a realtime tool call. */
   onOpenActivity?: (activityId: string) => boolean;
+  /** Create adventure after conversational agreement (captures real canvas). */
+  onCreateAdventure?: (
+    args: CreateAdventureToolArgs
+  ) => Promise<{
+    ok: boolean;
+    adventureId?: string;
+    title?: string;
+    duplicate?: boolean;
+    error?: string;
+  }>;
   documentId?: string;
 };
 
@@ -126,6 +143,7 @@ export function useRealtimePip(options: UseRealtimePipOptions = {}) {
   const onShareStatusRef = useRef(options.onShareStatus);
   const onDiscoveryRef = useRef(options.onDiscoveryObservation);
   const onOpenActivityRef = useRef(options.onOpenActivity);
+  const onCreateAdventureRef = useRef(options.onCreateAdventure);
   const documentIdRef = useRef(options.documentId);
 
   useEffect(() => {
@@ -133,12 +151,14 @@ export function useRealtimePip(options: UseRealtimePipOptions = {}) {
     onShareStatusRef.current = options.onShareStatus;
     onDiscoveryRef.current = options.onDiscoveryObservation;
     onOpenActivityRef.current = options.onOpenActivity;
+    onCreateAdventureRef.current = options.onCreateAdventure;
     documentIdRef.current = options.documentId;
   }, [
     options.getCanvasSnapshot,
     options.onShareStatus,
     options.onDiscoveryObservation,
     options.onOpenActivity,
+    options.onCreateAdventure,
     options.documentId,
   ]);
 
@@ -255,8 +275,9 @@ export function useRealtimePip(options: UseRealtimePipOptions = {}) {
               type: "response.create",
               response: {
                 output_modalities: ["audio"],
-                instructions:
-                  "The canvas snapshot failed or was empty. Tell the student kindly, and invite them to draw something if it was empty. Do not invent what is on the canvas.",
+                instructions: withEnglishLock(
+                  "The canvas snapshot failed or was empty. Tell the student kindly, and invite them to draw something if it was empty. Do not invent what is on the canvas."
+                ),
               },
             });
           }
@@ -277,9 +298,25 @@ export function useRealtimePip(options: UseRealtimePipOptions = {}) {
           });
         }
 
-        const prompt = opts?.fromTool
-          ? "Here is the latest snapshot of my Wondoodle canvas. Briefly acknowledge that you can see it, then ask one helpful question. Do not give the final answer away."
-          : "I asked you to look at my Wondoodle canvas. Here is a fresh snapshot. Briefly acknowledge that you can see it, then ask one helpful question. Do not give the final answer away.";
+        const adventureInvite =
+          usePipStore.getState().consumeAdventureInvitePending();
+
+        let adventureActive = false;
+        try {
+          const { useAdventureStore } = await import("@/store/adventureStore");
+          adventureActive =
+            useAdventureStore.getState().adventure?.status === "active";
+        } catch {
+          adventureActive = false;
+        }
+
+        const prompt = adventureInvite
+          ? "Here is the latest snapshot of my Wondoodle canvas. The student tapped Make an Adventure. Do NOT describe the drawing and do NOT ask a tutoring question. Reply with exactly one short line in this form: “Is this your adventure: <short guessed goal>?” Then wait for yes/no."
+          : adventureActive
+            ? "Here is the latest snapshot of my Wondoodle canvas for the active adventure. If their equation/answer for the goal looks correct, say it’s right, invite Check, and STOP. If wrong or incomplete, say which SPECIFIC part is wrong (which number/step) in one short sentence — do not only ask a vague question, and do not give the full correct final answer yet."
+            : opts?.fromTool
+              ? "Here is the latest snapshot of my Wondoodle canvas. If the solution looks correct, confirm briefly and stop. If wrong or incomplete, point to the SPECIFIC wrong part (which number/step) in one short sentence. Do not give away the full correct answer before they retry."
+              : "I asked you to look at my Wondoodle canvas. Here is a fresh snapshot. If the solution looks correct, confirm briefly and stop. If wrong or incomplete, point to the SPECIFIC wrong part (which number/step) in one short sentence. Do not give away the full correct answer before they retry.";
 
         const sent = sendEvent({
           type: "conversation.item.create",
@@ -299,9 +336,24 @@ export function useRealtimePip(options: UseRealtimePipOptions = {}) {
           return false;
         }
 
+        const lookInstructions = adventureInvite
+          ? withEnglishLock(
+              "Make an Adventure invite only. Say exactly one sentence like: “Is this your adventure: <short goal from the image>?” Do not describe the canvas. Do not ask what angles add up to. Do not teach. Wait for yes/no."
+            )
+          : adventureActive
+            ? withEnglishLock(
+                "Adventure canvas check. If the written solution matches the goal, say it’s correct, invite Check, and ask NOTHING else. If wrong/incomplete, name the exact wrong part (e.g. “the 70 you used for the two angles looks off”) in one sentence. Do not only ask “are you sure?” and do not state the full correct final answer yet."
+              )
+            : withEnglishLock(
+                "If the canvas shows a complete correct solution, confirm and stop. If wrong/incomplete, name the specific wrong part in one sentence. Do not quiz vaguely and do not reveal the full correct answer first."
+              );
+
         sendEvent({
           type: "response.create",
-          response: { output_modalities: ["audio"] },
+          response: {
+            output_modalities: ["audio"],
+            instructions: lookInstructions,
+          },
         });
         lastShareAtRef.current = Date.now();
         onShareStatusRef.current?.("Pip is looking at your work.");
@@ -525,6 +577,81 @@ export function useRealtimePip(options: UseRealtimePipOptions = {}) {
     [ackToolCall]
   );
 
+  const handleCreateAdventureCall = useCallback(
+    (callId: string, argsRaw: string | undefined) => {
+      if (handledCallsRef.current.has(callId)) return;
+      handledCallsRef.current.add(callId);
+
+      if (isMasteryIndependentActive()) {
+        ackToolCall(callId, {
+          ok: false,
+          blocked: true,
+          error: "Independent mastery check is active.",
+          guidance: "Finish or exit the Superpower Challenge first.",
+        });
+        return;
+      }
+
+      const parsed = parseCreateAdventureArgs(argsRaw ?? "{}");
+      void (async () => {
+        if (!parsed.studentAgreed) {
+          ackToolCall(callId, {
+            ok: false,
+            error: "studentAgreed must be true.",
+            guidance:
+              "Ask if they want an adventure and wait for a clear yes before calling create_adventure again.",
+          });
+          return;
+        }
+        if (parsed.goal.length < 3) {
+          ackToolCall(callId, {
+            ok: false,
+            error: "Goal too short or missing.",
+            guidance:
+              "Ask ONE short clarifying question about what they want to figure out, then call create_adventure after they answer and agree.",
+          });
+          return;
+        }
+
+        const handler = onCreateAdventureRef.current;
+        if (!handler) {
+          ackToolCall(callId, {
+            ok: false,
+            error: "Adventure creator unavailable.",
+            guidance: "Invite them to tap Make an Adventure on the toolbar.",
+          });
+          return;
+        }
+
+        try {
+          const result = await handler(parsed);
+          ackToolCall(callId, {
+            ok: result.ok,
+            adventureId: result.adventureId ?? null,
+            title: result.title ?? null,
+            duplicate: Boolean(result.duplicate),
+            error: result.error ?? null,
+            message: result.ok
+              ? result.duplicate
+                ? "Adventure already exists for this request. Celebrate briefly and invite them to view it when ready."
+                : `Adventure created: "${result.title}". Celebrate briefly. A small ready card is on screen — do not force them off the canvas.`
+              : result.error || "Could not create adventure.",
+            guidance: result.ok
+              ? "Stay in this voice session. Answer questions about the adventure using later [Adventure context] events."
+              : "Stay supportive. You may ask one clarifying question or invite them to try Make an Adventure again.",
+          });
+        } catch {
+          ackToolCall(callId, {
+            ok: false,
+            error: "Adventure creation failed.",
+            guidance: "Apologize briefly and offer to try again later.",
+          });
+        }
+      })();
+    },
+    [ackToolCall]
+  );
+
   const handleOpenActivityCall = useCallback(
     (callId: string, argsRaw: string | undefined) => {
       if (handledCallsRef.current.has(callId)) return;
@@ -621,9 +748,10 @@ export function useRealtimePip(options: UseRealtimePipOptions = {}) {
         type: "response.create",
         response: {
           output_modalities: ["audio"],
-          ...(opts?.instructions
-            ? { instructions: opts.instructions }
-            : {}),
+          instructions: withEnglishLock(
+            opts?.instructions?.trim() ||
+              "Respond briefly using the activity event facts."
+          ),
         },
       });
       return true;
@@ -671,6 +799,11 @@ export function useRealtimePip(options: UseRealtimePipOptions = {}) {
             handleOpenActivityCall(item.call_id, item.arguments);
           } else if (item.name === REPORT_TEACHBACK_ASSESSMENT_NAME) {
             handleTeachBackCall(item.call_id, item.arguments);
+          } else if (
+            item.name === CREATE_ADVENTURE_NAME ||
+            item.name === CREATE_LEARNING_ADVENTURE_NAME
+          ) {
+            handleCreateAdventureCall(item.call_id, item.arguments);
           } else if (item.name) {
             handleUnsupportedTool(item.call_id, item.name);
           }
@@ -687,6 +820,11 @@ export function useRealtimePip(options: UseRealtimePipOptions = {}) {
           handleOpenActivityCall(event.call_id, event.arguments);
         } else if (event.name === REPORT_TEACHBACK_ASSESSMENT_NAME) {
           handleTeachBackCall(event.call_id, event.arguments);
+        } else if (
+          event.name === CREATE_ADVENTURE_NAME ||
+          event.name === CREATE_LEARNING_ADVENTURE_NAME
+        ) {
+          handleCreateAdventureCall(event.call_id, event.arguments);
         } else if (event.name) {
           handleUnsupportedTool(event.call_id, event.name);
         }
@@ -706,6 +844,14 @@ export function useRealtimePip(options: UseRealtimePipOptions = {}) {
           );
         } else if (event.item.name === REPORT_TEACHBACK_ASSESSMENT_NAME) {
           handleTeachBackCall(event.item.call_id, event.item.arguments);
+        } else if (
+          event.item.name === CREATE_ADVENTURE_NAME ||
+          event.item.name === CREATE_LEARNING_ADVENTURE_NAME
+        ) {
+          handleCreateAdventureCall(
+            event.item.call_id,
+            event.item.arguments
+          );
         } else if (event.item.name) {
           handleUnsupportedTool(event.item.call_id, event.item.name);
         }
@@ -782,6 +928,7 @@ export function useRealtimePip(options: UseRealtimePipOptions = {}) {
       handleObservationCall,
       handleOpenActivityCall,
       handleTeachBackCall,
+      handleCreateAdventureCall,
       handleUnsupportedTool,
     ]
   );
@@ -854,9 +1001,10 @@ export function useRealtimePip(options: UseRealtimePipOptions = {}) {
         if (!greeted && dc.readyState === "open") {
           greeted = true;
           // TeachBack (and similar flows) can replace the generic greeting.
-          const opening =
+          const opening = withEnglishLock(
             usePipStore.getState().consumeOpeningInstructions() ??
-            "Speak only in English. Greet the student briefly as Pip and invite them to talk about what they're working on. Do not claim you can see their canvas yet. If they ask you to look, call look_at_canvas.";
+              "Greet the student briefly as Pip and invite them to talk about what they're working on. Do not claim you can see their canvas yet. If they ask you to look, call look_at_canvas."
+          );
           dc.send(
             JSON.stringify({
               type: "response.create",
@@ -924,11 +1072,21 @@ export function useRealtimePip(options: UseRealtimePipOptions = {}) {
   }, [connection, cleanup, startMeter, handleServerEvent]);
 
   const disconnect = useCallback(() => {
+    // Cancel any in-flight model speech before tearing down WebRTC.
+    try {
+      const dc = dcRef.current;
+      if (dc && dc.readyState === "open") {
+        dc.send(JSON.stringify({ type: "response.cancel" }));
+      }
+    } catch {
+      // ignore
+    }
     cleanup();
     clearCaptionHistory();
     setCaptions([]);
     setConnection("idle");
     setError(null);
+    setVoiceState("idle");
     onShareStatusRef.current?.(null);
   }, [cleanup]);
 

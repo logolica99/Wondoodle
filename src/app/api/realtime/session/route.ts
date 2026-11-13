@@ -8,6 +8,7 @@ import { LOOK_AT_CANVAS_TOOL } from "@/lib/voice/canvasLookIntent";
 import { REPORT_LEARNING_OBSERVATION_TOOL } from "@/lib/voice/reportLearningObservation";
 import { OPEN_LEARNING_ACTIVITY_TOOL } from "@/lib/voice/openLearningActivity";
 import { REPORT_TEACHBACK_ASSESSMENT_TOOL } from "@/lib/voice/reportTeachbackAssessment";
+import { CREATE_ADVENTURE_TOOL } from "@/lib/voice/createAdventureTool";
 
 export const runtime = "nodejs";
 
@@ -53,6 +54,7 @@ export async function POST() {
               REPORT_LEARNING_OBSERVATION_TOOL,
               OPEN_LEARNING_ACTIVITY_TOOL,
               REPORT_TEACHBACK_ASSESSMENT_TOOL,
+              CREATE_ADVENTURE_TOOL,
             ],
             tool_choice: "auto",
             audio: {

@@ -170,26 +170,13 @@ export function JourneyNode({
 
           <span
             className={cn(
-              "w-full rounded-2xl border bg-white px-2 py-1.5 shadow-soft",
-              isCurrent && "border-[#FFD66D]/80 bg-[#FFF8E8]",
-              isCompleted && "border-[#58D9B0]/45",
-              status === "available" && "border-black/5",
-              isSoon && "border-black/5"
+              "block w-full truncate font-display font-semibold leading-snug text-mc-ink",
+              compact ? "text-[13px]" : "text-[15px] sm:text-[17px]",
+              isCurrent && "text-[#7357E8]",
+              isSoon && "text-mc-ink/50"
             )}
           >
-            <span
-              className={cn(
-                "block font-display font-semibold leading-snug text-mc-ink",
-                compact ? "text-[13px]" : "text-[15px] sm:text-[17px]"
-              )}
-            >
-              {node.name}
-            </span>
-            {isSoon && (
-              <span className="mt-0.5 block text-[10px] font-bold uppercase tracking-wide text-mc-ink/45">
-                Soon
-              </span>
-            )}
+            {node.name}
           </span>
         </span>
       </motion.button>
