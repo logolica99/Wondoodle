@@ -1,8 +1,8 @@
 "use client";
 
-import { motion, useReducedMotion } from "motion/react";
 import { PipMood } from "@/store/uiStore";
 import { cn } from "@/lib/utils";
+import { PipAvatar, type PipAnimState } from "./PipAvatar";
 
 type PipMascotProps = {
   mood?: PipMood;
@@ -17,9 +17,22 @@ const sizes = {
   lg: 148,
 };
 
+function moodToAnimState(mood: PipMood): PipAnimState {
+  switch (mood) {
+    case "celebrate":
+      return "success";
+    case "thinking":
+      return "thinking";
+    case "welcome":
+    case "idle":
+    default:
+      return "idle";
+  }
+}
+
 /**
- * Pip is the official Wondoodle brand character (logo art) —
- * same face, headphones, and pencil body as the mark.
+ * Pip uses the original Wondoodle SVG with the same state-driven
+ * animations as the /learn companion (float, blink, tilt, success).
  */
 export function PipMascot({
   mood = "idle",
@@ -27,50 +40,12 @@ export function PipMascot({
   className,
   label = "Pip the Wondoodle mascot",
 }: PipMascotProps) {
-  const reduceMotion = useReducedMotion();
-  const px = sizes[size];
-
-  const bounce =
-    reduceMotion || mood === "idle"
-      ? undefined
-      : mood === "celebrate"
-        ? ({
-            y: [0, -8, 0],
-            transition: { duration: 0.55, ease: "easeOut" as const },
-          })
-        : mood === "welcome"
-          ? ({
-              y: [0, -4, 0],
-              transition: { duration: 0.7, ease: "easeOut" as const },
-            })
-          : ({
-              rotate: [0, -4, 4, 0],
-              transition: { duration: 0.75, ease: "easeInOut" as const },
-            });
-
   return (
-    <motion.div
-      className={cn(
-        "relative inline-flex select-none items-center justify-center drop-shadow-sm",
-        className
-      )}
-      style={{ width: px, height: px }}
-      animate={bounce}
-      aria-label={label}
-      role="img"
-      data-testid="pip-mascot"
-      data-mood={mood}
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/brand/pip.png"
-        alt=""
-        width={px}
-        height={px}
-        draggable={false}
-        className="h-full w-full object-contain"
-        aria-hidden
-      />
-    </motion.div>
+    <PipAvatar
+      state={moodToAnimState(mood)}
+      size={sizes[size]}
+      label={label}
+      className={cn("drop-shadow-sm", className)}
+    />
   );
 }

@@ -31,6 +31,11 @@ import {
   saveDocument,
 } from "@/lib/canvas/storage";
 import {
+  clearPendingDocumentTitle,
+  isDefaultUntitledTitle,
+  peekPendingDocumentTitle,
+} from "@/lib/canvas/pendingTitle";
+import {
   downloadBlob,
   exportDocument,
   fileToDataUrl,
@@ -150,6 +155,33 @@ function scheduleSave(
 }
 
 let transformSnapshotTaken = false;
+let hydrateInFlight: Promise<void> | null = null;
+
+/** Apply welcome-page title once the store is ready (safe across remounts). */
+function applyPendingTitleIfNeeded(
+  get: () => CanvasStore,
+  set: (partial: Partial<CanvasStore>) => void
+) {
+  const pending = peekPendingDocumentTitle();
+  if (!pending) return;
+
+  const current = get().document;
+  if (current.title === pending) {
+    clearPendingDocumentTitle();
+    return;
+  }
+
+  // Only rename empty / default untitled adventures from the welcome flow.
+  if (current.objects.length > 0 && !isDefaultUntitledTitle(current.title)) {
+    clearPendingDocumentTitle();
+    return;
+  }
+
+  const next = { ...current, title: pending, updatedAt: Date.now() };
+  clearPendingDocumentTitle();
+  set({ document: next, saveStatus: "saving", saveError: null });
+  scheduleSave(get, set, next);
+}
 
 export const useCanvasStore = create<CanvasStore>((set, get) => ({
   document: createEmptyDocument(DEFAULT_DOCUMENT_ID),
@@ -168,27 +200,69 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   canRedo: false,
 
   hydrate: async () => {
-    try {
-      const doc = await loadDocument(DEFAULT_DOCUMENT_ID);
-      set({
-        document: doc,
-        isHydrated: true,
-        saveStatus: "saved",
-        saveError: null,
-      });
-      history.clear();
-      syncHistoryFlags(set);
-    } catch (error) {
-      set({
-        document: createEmptyDocument(DEFAULT_DOCUMENT_ID),
-        isHydrated: true,
-        saveStatus: "error",
-        saveError:
-          error instanceof Error
-            ? error.message
-            : "Could not restore your previous work.",
-      });
+    if (get().isHydrated) {
+      applyPendingTitleIfNeeded(get, set);
+      return;
     }
+    if (hydrateInFlight) {
+      await hydrateInFlight;
+      applyPendingTitleIfNeeded(get, set);
+      return;
+    }
+
+    hydrateInFlight = (async () => {
+      try {
+        let doc = await loadDocument(DEFAULT_DOCUMENT_ID);
+        const pending = peekPendingDocumentTitle();
+        if (
+          pending &&
+          doc.objects.length === 0 &&
+          isDefaultUntitledTitle(doc.title)
+        ) {
+          doc = { ...doc, title: pending, updatedAt: Date.now() };
+          clearPendingDocumentTitle();
+          set({
+            document: doc,
+            isHydrated: true,
+            saveStatus: "saving",
+            saveError: null,
+          });
+          scheduleSave(get, set, doc);
+        } else {
+          set({
+            document: doc,
+            isHydrated: true,
+            saveStatus: "saved",
+            saveError: null,
+          });
+          // Store may already be hydrated in-memory from an earlier route;
+          // still try pending rename for empty untitled docs.
+          applyPendingTitleIfNeeded(get, set);
+        }
+        history.clear();
+        syncHistoryFlags(set);
+      } catch (error) {
+        const pending = peekPendingDocumentTitle();
+        if (pending) clearPendingDocumentTitle();
+        const empty = createEmptyDocument(
+          DEFAULT_DOCUMENT_ID,
+          pending || undefined
+        );
+        set({
+          document: empty,
+          isHydrated: true,
+          saveStatus: "error",
+          saveError:
+            error instanceof Error
+              ? error.message
+              : "Could not restore your previous work.",
+        });
+      } finally {
+        hydrateInFlight = null;
+      }
+    })();
+
+    await hydrateInFlight;
   },
 
   setTool: (tool) => {
@@ -296,6 +370,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     if (!isDrawing) return;
     set({ isDrawing: false, currentStrokeId: null });
     scheduleSave(get, set, doc);
+    void import("@/lib/learning/recordHelpers").then(({ recordFirstDoodle }) =>
+      recordFirstDoodle(doc.id)
+    );
   },
 
   eraseAt: (x, y) => {
@@ -342,6 +419,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         tool: "select",
       });
     }, 0);
+    void import("@/lib/learning/recordHelpers").then(({ recordTextCreated }) =>
+      recordTextCreated(get().document.id)
+    );
   },
 
   updateTextContent: (id, text) => {
@@ -468,6 +548,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         tool: "select",
         imageError: null,
       });
+      void import("@/lib/learning/recordHelpers").then(({ recordImageAdded }) =>
+        recordImageAdded(get().document.id)
+      );
     } catch {
       set({
         imageError: "That picture didn't work. Try a PNG, JPG, or WebP.",

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { LearnWorkspace } from "@/components/canvas/LearnWorkspace";
 
 export const metadata = {
@@ -6,5 +7,15 @@ export const metadata = {
 };
 
 export default function LearnPage() {
-  return <LearnWorkspace />;
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-[100dvh] items-center justify-center text-sm text-mc-ink/60">
+          Preparing your creative space…
+        </div>
+      }
+    >
+      <LearnWorkspace />
+    </Suspense>
+  );
 }

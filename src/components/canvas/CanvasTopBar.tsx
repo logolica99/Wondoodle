@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { WondoodleLogo } from "@/components/brand/WondoodleLogo";
+import { AppNav } from "@/components/nav/AppNav";
 import { SaveStatusBadge } from "./SaveStatus";
 import { useCanvasStore } from "@/store/canvasStore";
 import { useUiStore } from "@/store/uiStore";
@@ -76,6 +77,7 @@ export function CanvasTopBar() {
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2">
+          <AppNav className="hidden md:flex" />
           <SaveStatusBadge status={saveStatus} error={saveError} />
 
           <TooltipProvider delayDuration={180}>

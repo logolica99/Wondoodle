@@ -415,7 +415,11 @@ export function SmartCanvas() {
 
       <VoiceNoteMarkersLayer camera={camera} />
 
-      <div className="pointer-events-none absolute bottom-[12.5rem] right-3 z-20 sm:bottom-5 sm:right-5">
+      {/* Bottom-right reserved for zoom — Pip floats elsewhere (≥16px clear). */}
+      <div
+        className="pointer-events-none absolute bottom-[max(1.25rem,env(safe-area-inset-bottom,0px))] right-[max(1.25rem,env(safe-area-inset-right,0px))] z-20"
+        data-testid="zoom-controls-anchor"
+      >
         <ZoomControls
           zoom={camera.zoom}
           onZoomIn={() => zoomTowardCenter(camera.zoom * 1.12)}

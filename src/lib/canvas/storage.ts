@@ -6,6 +6,7 @@ import {
 } from "@/types/canvas";
 import { createEmptyDocument } from "./document";
 import type { VoiceNote } from "@/types/voice";
+import type { LearningEvent } from "@/types/learning";
 
 export type DocumentRecord = {
   id: string;
@@ -17,6 +18,7 @@ export type DocumentRecord = {
 
 class WondoodleDB extends Dexie {
   documents!: Table<DocumentRecord, string>;
+  learningEvents!: Table<LearningEvent, string>;
 
   constructor() {
     super("WondoodleDB");
@@ -27,12 +29,18 @@ class WondoodleDB extends Dexie {
     this.version(2).stores({
       documents: "id, updatedAt, schemaVersion",
     });
+    // v3 adds typed learning events for Journey progress (no raw audio).
+    this.version(3).stores({
+      documents: "id, updatedAt, schemaVersion",
+      learningEvents:
+        "eventId, sessionId, documentId, conceptId, eventType, timestamp",
+    });
   }
 }
 
 let dbInstance: WondoodleDB | null = null;
 
-function getDB(): WondoodleDB {
+export function getDB(): WondoodleDB {
   if (typeof window === "undefined") {
     throw new Error("IndexedDB is only available in the browser");
   }

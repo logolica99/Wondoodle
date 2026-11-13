@@ -3,6 +3,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { wantsCanvasLook } from "@/lib/voice/canvasLookIntent";
 import type { CanvasSnapshotResult } from "@/lib/canvas/snapshot";
+import { REPORT_LEARNING_OBSERVATION_NAME } from "@/lib/voice/reportLearningObservation";
+import { OPEN_LEARNING_ACTIVITY_NAME } from "@/lib/voice/openLearningActivity";
+import { REPORT_TEACHBACK_ASSESSMENT_NAME } from "@/lib/voice/reportTeachbackAssessment";
+import { parseLearningObservationArgs } from "@/lib/learning/observationSchema";
+import { applyLearningObservation } from "@/lib/learning/observationHandler";
+import { parseTeachBackAssessmentArgs } from "@/lib/learning/teachbackSchema";
+import { applyTeachBackAssessment } from "@/lib/learning/teachbackHandler";
+import type { DiscoveryCardModel } from "@/lib/learning/observationSchema";
+import { buildActivityRoute } from "@/lib/learning/misconceptions";
+import {
+  isImplementedActivity,
+  useActivityStore,
+} from "@/store/activityStore";
+import { usePipStore } from "@/store/pipStore";
+import { isMasteryIndependentActive } from "@/store/masteryStore";
 
 export type PipConnectionState =
   | "idle"
@@ -61,16 +76,19 @@ type RealtimeServerEvent = {
   delta?: string;
   name?: string;
   call_id?: string;
+  arguments?: string;
   item?: {
     type?: string;
     name?: string;
     call_id?: string;
+    arguments?: string;
   };
   response?: {
     output?: Array<{
       type?: string;
       name?: string;
       call_id?: string;
+      arguments?: string;
     }>;
   };
 };
@@ -78,6 +96,10 @@ type RealtimeServerEvent = {
 export type UseRealtimePipOptions = {
   getCanvasSnapshot?: () => Promise<CanvasSnapshotResult>;
   onShareStatus?: (message: string | null) => void;
+  onDiscoveryObservation?: (card: DiscoveryCardModel) => void;
+  /** Open a validated activity from a realtime tool call. */
+  onOpenActivity?: (activityId: string) => boolean;
+  documentId?: string;
 };
 
 export function useRealtimePip(options: UseRealtimePipOptions = {}) {
@@ -102,11 +124,23 @@ export function useRealtimePip(options: UseRealtimePipOptions = {}) {
   const handledCallsRef = useRef<Set<string>>(new Set());
   const getSnapshotRef = useRef(options.getCanvasSnapshot);
   const onShareStatusRef = useRef(options.onShareStatus);
+  const onDiscoveryRef = useRef(options.onDiscoveryObservation);
+  const onOpenActivityRef = useRef(options.onOpenActivity);
+  const documentIdRef = useRef(options.documentId);
 
   useEffect(() => {
     getSnapshotRef.current = options.getCanvasSnapshot;
     onShareStatusRef.current = options.onShareStatus;
-  }, [options.getCanvasSnapshot, options.onShareStatus]);
+    onDiscoveryRef.current = options.onDiscoveryObservation;
+    onOpenActivityRef.current = options.onOpenActivity;
+    documentIdRef.current = options.documentId;
+  }, [
+    options.getCanvasSnapshot,
+    options.onShareStatus,
+    options.onDiscoveryObservation,
+    options.onOpenActivity,
+    options.documentId,
+  ]);
 
   const stopMeter = useCallback(() => {
     if (meterRafRef.current != null) {
@@ -123,6 +157,7 @@ export function useRealtimePip(options: UseRealtimePipOptions = {}) {
   const cleanup = useCallback(() => {
     connectedRef.current = false;
     sharingRef.current = false;
+    handledCallsRef.current.clear();
     stopMeter();
 
     try {
@@ -313,14 +348,22 @@ export function useRealtimePip(options: UseRealtimePipOptions = {}) {
       source.connect(analyser);
       audioCtxRef.current = ctx;
       const data = new Uint8Array(analyser.frequencyBinCount);
-      const tick = () => {
+      let lastPublish = 0;
+      let lastLevel = 0;
+      const tick = (now: number) => {
         analyser.getByteTimeDomainData(data);
         let sum = 0;
         for (let i = 0; i < data.length; i++) {
           const v = (data[i] - 128) / 128;
           sum += v * v;
         }
-        setLevel(Math.min(1, Math.sqrt(sum / data.length) * 3.2));
+        const next = Math.min(1, Math.sqrt(sum / data.length) * 3.2);
+        // Throttle React updates (~12fps) to protect canvas performance.
+        if (now - lastPublish > 80 && Math.abs(next - lastLevel) > 0.03) {
+          lastPublish = now;
+          lastLevel = next;
+          setLevel(next);
+        }
         meterRafRef.current = requestAnimationFrame(tick);
       };
       meterRafRef.current = requestAnimationFrame(tick);
@@ -336,6 +379,256 @@ export function useRealtimePip(options: UseRealtimePipOptions = {}) {
       void deliverCanvasSnapshot({ callId, fromTool: true });
     },
     [deliverCanvasSnapshot]
+  );
+
+  const ackToolCall = useCallback(
+    (callId: string, output: Record<string, unknown>) => {
+      sendEvent({
+        type: "conversation.item.create",
+        item: {
+          type: "function_call_output",
+          call_id: callId,
+          output: JSON.stringify(output),
+        },
+      });
+      sendEvent({
+        type: "response.create",
+        response: { output_modalities: ["audio"] },
+      });
+    },
+    [sendEvent]
+  );
+
+  const handleObservationCall = useCallback(
+    (callId: string, argsRaw: string | undefined) => {
+      if (handledCallsRef.current.has(callId)) return;
+      handledCallsRef.current.add(callId);
+
+      if (isMasteryIndependentActive()) {
+        ackToolCall(callId, {
+          ok: false,
+          blocked: true,
+          error: "Independent mastery check is active.",
+          guidance:
+            "Do not give math hints or observations. Only help with navigation. If they need math help, invite them to exit the challenge.",
+        });
+        return;
+      }
+
+      void (async () => {
+        try {
+          const parsed = parseLearningObservationArgs(argsRaw ?? "{}");
+          if (!parsed.ok) {
+            ackToolCall(callId, {
+              ok: false,
+              error: parsed.error,
+              guidance:
+                "Tool arguments were invalid. Ask a clarifying question if needed and continue normally.",
+            });
+            return;
+          }
+
+          const result = await applyLearningObservation(parsed.observation, {
+            callId,
+            documentId: documentIdRef.current,
+          });
+
+          if (result.card) {
+            try {
+              onDiscoveryRef.current?.(result.card);
+            } catch {
+              // UI update must not break voice.
+            }
+          }
+
+          ackToolCall(callId, {
+            ok: result.ok,
+            action: result.action,
+            message: result.message,
+            eventId: result.eventId ?? null,
+          });
+        } catch {
+          ackToolCall(callId, {
+            ok: false,
+            error: "Observation handling failed.",
+            guidance: "Continue the conversation without a discovery card.",
+          });
+        }
+      })();
+    },
+    [ackToolCall]
+  );
+
+  const handleUnsupportedTool = useCallback(
+    (callId: string, name: string) => {
+      if (handledCallsRef.current.has(callId)) return;
+      handledCallsRef.current.add(callId);
+      ackToolCall(callId, {
+        ok: false,
+        error: `Unsupported tool: ${name}`,
+        guidance: "Continue speaking with the student normally.",
+      });
+    },
+    [ackToolCall]
+  );
+
+  const handleTeachBackCall = useCallback(
+    (callId: string, argsRaw: string | undefined) => {
+      if (handledCallsRef.current.has(callId)) return;
+      handledCallsRef.current.add(callId);
+
+      if (isMasteryIndependentActive()) {
+        ackToolCall(callId, {
+          ok: false,
+          blocked: true,
+          error: "Independent mastery check is active.",
+          guidance:
+            "Do not assess TeachBack or give fraction hints during the Superpower Challenge.",
+        });
+        return;
+      }
+
+      void (async () => {
+        try {
+          const parsed = parseTeachBackAssessmentArgs(argsRaw ?? "{}");
+          if (!parsed.ok) {
+            ackToolCall(callId, {
+              ok: false,
+              error: parsed.error,
+              guidance:
+                "Assessment arguments were invalid. Ask one clarifying question and keep TeachBack open.",
+            });
+            return;
+          }
+
+          const result = await applyTeachBackAssessment(parsed.assessment, {
+            callId,
+            documentId: documentIdRef.current,
+          });
+
+          ackToolCall(callId, {
+            ok: result.ok,
+            action: result.action,
+            message: result.message,
+            followUpQuestion: result.followUpQuestion ?? null,
+          });
+        } catch {
+          ackToolCall(callId, {
+            ok: false,
+            error: "TeachBack assessment handling failed.",
+            guidance:
+              "Keep the student in TeachBack and ask a gentle clarifying question.",
+          });
+        }
+      })();
+    },
+    [ackToolCall]
+  );
+
+  const handleOpenActivityCall = useCallback(
+    (callId: string, argsRaw: string | undefined) => {
+      if (handledCallsRef.current.has(callId)) return;
+      handledCallsRef.current.add(callId);
+
+      let activityId = "";
+      try {
+        const parsed = JSON.parse(argsRaw || "{}") as { activityId?: string };
+        activityId = String(parsed.activityId ?? "");
+      } catch {
+        ackToolCall(callId, {
+          ok: false,
+          error: "Malformed open_learning_activity arguments.",
+        });
+        return;
+      }
+
+      if (isMasteryIndependentActive()) {
+        ackToolCall(callId, {
+          ok: false,
+          blocked: true,
+          error: "Independent mastery check is active.",
+          guidance:
+            "Do not open guided activities during the Superpower Challenge.",
+        });
+        return;
+      }
+
+      if (!isImplementedActivity(activityId)) {
+        ackToolCall(callId, {
+          ok: false,
+          error: `Activity not available: ${activityId || "(missing)"}`,
+          guidance:
+            "Only fraction_comparison is available. Invite the student to tap Try playground on the discovery card.",
+        });
+        return;
+      }
+
+      let opened = false;
+      try {
+        opened = Boolean(onOpenActivityRef.current?.(activityId));
+      } catch {
+        opened = false;
+      }
+
+      if (!opened) {
+        try {
+          opened = useActivityStore
+            .getState()
+            .openFractionPlayground(buildActivityRoute("denominator_size"));
+        } catch {
+          opened = false;
+        }
+      }
+
+      ackToolCall(callId, {
+        ok: opened,
+        activityId,
+        message: opened
+          ? "Fraction Playground is open. Guide the student using activity events; do not grade for them."
+          : "Could not open the activity. Ask them to tap Try playground on the discovery card.",
+      });
+    },
+    [ackToolCall]
+  );
+
+  /** Push structured activity ground-truth into the live conversation. */
+  const notifyActivityEvent = useCallback(
+    (
+      summary: string,
+      payload?: Record<string, unknown>,
+      opts?: { createResponse?: boolean; instructions?: string }
+    ) => {
+      if (!connectedRef.current) return false;
+      const body = [
+        "[Activity event]",
+        summary,
+        payload ? `data: ${JSON.stringify(payload)}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      const sent = sendEvent({
+        type: "conversation.item.create",
+        item: {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: body }],
+        },
+      });
+      if (!sent) return false;
+      if (opts?.createResponse === false) return true;
+      sendEvent({
+        type: "response.create",
+        response: {
+          output_modalities: ["audio"],
+          ...(opts?.instructions
+            ? { instructions: opts.instructions }
+            : {}),
+        },
+      });
+      return true;
+    },
+    [sendEvent]
   );
 
   const handleServerEvent = useCallback(
@@ -369,23 +662,53 @@ export function useRealtimePip(options: UseRealtimePipOptions = {}) {
 
         const outputs = event.response?.output ?? [];
         for (const item of outputs) {
-          if (item.type === "function_call" && item.name === "look_at_canvas") {
-            if (item.call_id) handleLookAtCanvasCall(item.call_id);
+          if (item.type !== "function_call" || !item.call_id) continue;
+          if (item.name === "look_at_canvas") {
+            handleLookAtCanvasCall(item.call_id);
+          } else if (item.name === REPORT_LEARNING_OBSERVATION_NAME) {
+            handleObservationCall(item.call_id, item.arguments);
+          } else if (item.name === OPEN_LEARNING_ACTIVITY_NAME) {
+            handleOpenActivityCall(item.call_id, item.arguments);
+          } else if (item.name === REPORT_TEACHBACK_ASSESSMENT_NAME) {
+            handleTeachBackCall(item.call_id, item.arguments);
+          } else if (item.name) {
+            handleUnsupportedTool(item.call_id, item.name);
           }
         }
       } else if (
         type === "response.function_call_arguments.done" &&
-        event.name === "look_at_canvas" &&
         event.call_id
       ) {
-        handleLookAtCanvasCall(event.call_id);
+        if (event.name === "look_at_canvas") {
+          handleLookAtCanvasCall(event.call_id);
+        } else if (event.name === REPORT_LEARNING_OBSERVATION_NAME) {
+          handleObservationCall(event.call_id, event.arguments);
+        } else if (event.name === OPEN_LEARNING_ACTIVITY_NAME) {
+          handleOpenActivityCall(event.call_id, event.arguments);
+        } else if (event.name === REPORT_TEACHBACK_ASSESSMENT_NAME) {
+          handleTeachBackCall(event.call_id, event.arguments);
+        } else if (event.name) {
+          handleUnsupportedTool(event.call_id, event.name);
+        }
       } else if (
         type === "response.output_item.done" &&
         event.item?.type === "function_call" &&
-        event.item.name === "look_at_canvas" &&
         event.item.call_id
       ) {
-        handleLookAtCanvasCall(event.item.call_id);
+        if (event.item.name === "look_at_canvas") {
+          handleLookAtCanvasCall(event.item.call_id);
+        } else if (event.item.name === REPORT_LEARNING_OBSERVATION_NAME) {
+          handleObservationCall(event.item.call_id, event.item.arguments);
+        } else if (event.item.name === OPEN_LEARNING_ACTIVITY_NAME) {
+          handleOpenActivityCall(
+            event.item.call_id,
+            event.item.arguments
+          );
+        } else if (event.item.name === REPORT_TEACHBACK_ASSESSMENT_NAME) {
+          handleTeachBackCall(event.item.call_id, event.item.arguments);
+        } else if (event.item.name) {
+          handleUnsupportedTool(event.item.call_id, event.item.name);
+        }
       } else if (
         type === "conversation.item.input_audio_transcription.completed" &&
         event.transcript
@@ -453,7 +776,14 @@ export function useRealtimePip(options: UseRealtimePipOptions = {}) {
         setError("Pip had trouble hearing that. You can retry the connection.");
       }
     },
-    [deliverCanvasSnapshot, handleLookAtCanvasCall]
+    [
+      deliverCanvasSnapshot,
+      handleLookAtCanvasCall,
+      handleObservationCall,
+      handleOpenActivityCall,
+      handleTeachBackCall,
+      handleUnsupportedTool,
+    ]
   );
 
   const connect = useCallback(async () => {
@@ -523,12 +853,15 @@ export function useRealtimePip(options: UseRealtimePipOptions = {}) {
         setError(null);
         if (!greeted && dc.readyState === "open") {
           greeted = true;
+          // TeachBack (and similar flows) can replace the generic greeting.
+          const opening =
+            usePipStore.getState().consumeOpeningInstructions() ??
+            "Speak only in English. Greet the student briefly as Pip and invite them to talk about what they're working on. Do not claim you can see their canvas yet. If they ask you to look, call look_at_canvas.";
           dc.send(
             JSON.stringify({
               type: "response.create",
               response: {
-                instructions:
-                  "Greet the student briefly as Pip and invite them to talk about what they're working on. Do not claim you can see their canvas yet. If they ask you to look, call look_at_canvas.",
+                instructions: opening,
               },
             })
           );
@@ -626,6 +959,7 @@ export function useRealtimePip(options: UseRealtimePipOptions = {}) {
     disconnect,
     toggleMute,
     interrupt,
+    notifyActivityEvent,
     isConnected: connection === "connected",
   };
 }

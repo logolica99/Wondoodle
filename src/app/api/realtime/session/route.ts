@@ -5,6 +5,9 @@ import {
   PIP_VOICE,
 } from "@/lib/voice/pipInstructions";
 import { LOOK_AT_CANVAS_TOOL } from "@/lib/voice/canvasLookIntent";
+import { REPORT_LEARNING_OBSERVATION_TOOL } from "@/lib/voice/reportLearningObservation";
+import { OPEN_LEARNING_ACTIVITY_TOOL } from "@/lib/voice/openLearningActivity";
+import { REPORT_TEACHBACK_ASSESSMENT_TOOL } from "@/lib/voice/reportTeachbackAssessment";
 
 export const runtime = "nodejs";
 
@@ -45,7 +48,12 @@ export async function POST() {
             model: PIP_REALTIME_MODEL,
             instructions: PIP_INSTRUCTIONS,
             output_modalities: ["audio"],
-            tools: [LOOK_AT_CANVAS_TOOL],
+            tools: [
+              LOOK_AT_CANVAS_TOOL,
+              REPORT_LEARNING_OBSERVATION_TOOL,
+              OPEN_LEARNING_ACTIVITY_TOOL,
+              REPORT_TEACHBACK_ASSESSMENT_TOOL,
+            ],
             tool_choice: "auto",
             audio: {
               input: {
@@ -57,6 +65,8 @@ export async function POST() {
                 },
                 transcription: {
                   model: "gpt-4o-mini-transcribe",
+                  // Bias captions toward English so Pip is less likely to mirror a mis-detected language.
+                  language: "en",
                 },
               },
               output: {
