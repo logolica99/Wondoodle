@@ -1,0 +1,104 @@
+@import "../styles/tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    color: var(--mc-ink);
+    background-color: var(--mc-cream);
+    font-family: var(--font-nunito), Nunito, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-image:
+      radial-gradient(ellipse 70% 45% at 12% -8%, rgba(255, 145, 182, 0.22), transparent 55%),
+      radial-gradient(ellipse 55% 40% at 92% 8%, rgba(88, 217, 176, 0.2), transparent 50%),
+      radial-gradient(ellipse 50% 35% at 70% 100%, rgba(115, 87, 232, 0.14), transparent 55%),
+      linear-gradient(180deg, #fff9f0 0%, #f5f0ff 100%);
+    background-attachment: fixed;
+    min-height: 100dvh;
+  }
+
+  :focus-visible {
+    outline: 3px solid rgba(115, 87, 232, 0.45);
+    outline-offset: 3px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  .animate-in {
+    animation: fade-in 0.2s ease-out;
+  }
+
+  .animate-out {
+    animation: fade-in 0.15s ease-in reverse;
+  }
+
+  .font-display {
+    font-family: var(--font-fredoka), Fredoka, system-ui, sans-serif;
+  }
+
+  /* Rotating shine ring for Talk-to-Pip */
+  .mc-shine-border {
+    position: relative;
+    display: inline-flex;
+    border-radius: 1.05rem;
+    padding: 2px;
+    overflow: hidden;
+    background: #efeaff;
+  }
+
+  .mc-shine-border::before {
+    content: "";
+    position: absolute;
+    inset: -60%;
+    background: conic-gradient(
+      from 0deg,
+      transparent 0deg,
+      #a894f8 50deg,
+      #ff91b6 110deg,
+      #58d9b0 170deg,
+      #ffd66d 230deg,
+      #7357e8 290deg,
+      transparent 340deg
+    );
+    animation: mc-shine-spin 2.2s linear infinite;
+  }
+
+  .mc-shine-border .mc-shine-inner {
+    position: relative;
+    z-index: 1;
+    border-radius: 0.95rem;
+  }
+
+  @keyframes mc-shine-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mc-shine-border {
+      background: linear-gradient(135deg, #a894f8, #ff91b6, #58d9b0);
+    }
+    .mc-shine-border::before {
+      display: none;
+    }
+  }
+}

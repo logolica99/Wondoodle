@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="180 90 620 560" role="img" aria-labelledby="title desc">
+  <title id="title">MindCanvas icon-only logo</title>
+  <desc id="desc">A purple pencil forming a listening ear, with sound waves, sparkles, and a playful drawn flourish.</desc>
+  <defs>
+    <linearGradient id="ear" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9F75F3"/><stop offset=".65" stop-color="#7357E8"/><stop offset="1" stop-color="#6746CF"/>
+    </linearGradient>
+    <linearGradient id="pencil" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5635B5"/><stop offset="1" stop-color="#9E67F4"/>
+    </linearGradient>
+  </defs>
+  <path d="M311 284 C312 166 397 104 493 116 C596 129 652 215 626 315 C613 362 589 397 558 441 C539 469 522 487 493 506" fill="none" stroke="url(#ear)" stroke-width="53" stroke-linecap="round"/>
+  <path d="M405 269 C425 216 473 201 508 221 C551 245 550 299 519 329 C507 340 490 332 477 339 C457 349 460 371 450 388" fill="none" stroke="#B394F1" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M664 258 C697 288 699 336 674 363" fill="none" stroke="#A882EA" stroke-width="27" stroke-linecap="round"/>
+  <path d="M709 223 C759 274 766 354 721 412" fill="none" stroke="#A882EA" stroke-width="26" stroke-linecap="round"/>
+  <g transform="rotate(-42 383 450)">
+    <rect x="334" y="332" width="100" height="208" rx="22" fill="url(#pencil)"/>
+    <path d="M360 360 V505" stroke="#AB83F5" stroke-width="18" stroke-linecap="round" opacity=".75"/>
+    <rect x="334" y="316" width="100" height="59" rx="22" fill="#F18ACA"/>
+    <rect x="334" y="365" width="100" height="14" fill="#FAF5FF"/>
+    <path d="M334 534 L384 614 L434 534 Z" fill="#FFD7B3"/>
+    <path d="M366 585 L384 614 L402 585 Z" fill="#4C318E"/>
+  </g>
+  <path d="M511 540 C573 563 635 496 692 511 C753 529 688 594 606 592" fill="none" stroke="#9E68E9" stroke-width="15" stroke-linecap="round"/>
+  <path d="M255 215 Q268 246 298 255 Q269 266 255 298 Q242 266 213 255 Q243 245 255 215Z" fill="#FFD16C"/>
+  <path d="M646 468 Q656 492 680 500 Q656 508 646 533 Q636 508 612 500 Q636 492 646 468Z" fill="#FFD16C"/>
+  <path d="M650 141 L638 168" stroke="#65D9AE" stroke-width="17" stroke-linecap="round"/>
+  <path d="M713 177 L684 191" stroke="#65D9AE" stroke-width="17" stroke-linecap="round"/>
+</svg>

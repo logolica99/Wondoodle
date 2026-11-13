@@ -1,0 +1,38 @@
+:root {
+  /* Kid-friendly Wondoodle palette */
+  --mc-purple: #7357e8;
+  --mc-pink: #ff91b6;
+  --mc-mint: #58d9b0;
+  --mc-yellow: #ffd66d;
+  --mc-blue: #76b8ff;
+  --mc-cream: #fff9f0;
+  --mc-ink: #28304a;
+  --mc-white: #ffffff;
+  --mc-purple-soft: #efeaff;
+  --mc-mint-soft: #e6fbf4;
+  --mc-pink-soft: #ffe8f1;
+  --mc-yellow-soft: #fff6d9;
+
+  --background: 36 100% 97%;
+  --foreground: 224 28% 22%;
+  --card: 0 0% 100%;
+  --card-foreground: 224 28% 22%;
+  --primary: 251 76% 63%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 160 63% 60%;
+  --secondary-foreground: 224 28% 22%;
+  --muted: 36 60% 94%;
+  --muted-foreground: 224 16% 40%;
+  --accent: 335 100% 78%;
+  --accent-foreground: 224 28% 22%;
+  --destructive: 350 80% 55%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 251 35% 88%;
+  --input: 251 35% 88%;
+  --ring: 251 76% 63%;
+  --radius: 1.15rem;
+
+  --shadow-soft: 0 4px 16px rgba(115, 87, 232, 0.1), 0 1px 3px rgba(40, 48, 74, 0.05);
+  --shadow-float: 0 12px 36px rgba(115, 87, 232, 0.16), 0 4px 10px rgba(40, 48, 74, 0.06);
+  --shadow-toolbar: 0 10px 28px rgba(115, 87, 232, 0.18), 0 2px 6px rgba(40, 48, 74, 0.06);
+}
